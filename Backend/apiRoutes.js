@@ -105,17 +105,78 @@ const generateRandomPassword = (length = 10) =>
 
 // ---------------------------------------------
 // UPDATE USER PROFILE (SAFE, CLEAN, SINGLE ROUTE)
+
 // ---------------------------------------------
+// .................................................
+
+router.post("/get-user-by-email", (req, res) => {
+  const { email } = req.body;
+
+  if (!email) return res.status(400).json({ message: "Email required" });
+
+  db.query("SELECT id FROM users WHERE email = ?", [email], (err, rows) => {
+    if (err) return res.status(500).json({ message: "Database error" });
+
+    if (rows.length === 0) return res.json({ id: 0 });
+
+    return res.json({ id: rows[0].id });
+  });
+});
+
+
+// .........................................................
 router.put("/update-profile", (req, res) => {
   try {
     if (!req.body) {
       console.log("Request body missing");
       return res.status(400).json({ message: "Request body is required" });
     }
+const doInsert = (passwordToStore) => {
+  const insertSql = `
+    INSERT INTO users
+      (email, password, firstName, lastName, role, phone, address, department, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `;
+
+  const insertParams = [
+    email,
+    passwordToStore,
+    firstName,
+    lastName,
+    'Admin',
+    phone,
+    address,
+    department
+  ];
+
+  db.query(insertSql, insertParams, (insertErr, insertRes) => {
+    if (insertErr) {
+      console.error("Insert user error:", insertErr);
+      if (insertErr.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ message: "Email already exists" });
+      }
+      return res.status(500).json({ message: "Failed to create new user" });
+    }
+
+    // Return created user
+    db.query(
+      "SELECT id, email, firstName, lastName, phone, address, department, role, createdAt FROM users WHERE id = ?",
+      [insertRes.insertId],
+      (fetchErr, fetchRows) => {
+        if (fetchErr) {
+          console.error("Fetch new user error:", fetchErr);
+          return res.status(201).json({ message: "New profile created" });
+        }
+        return res.status(201).json({ message: "New profile created", user: fetchRows[0] });
+      }
+    );
+  });
+};
 
     // Accept either number or string id — normalize to integer
     const rawId = req.body.id;
     const id = rawId !== undefined ? parseInt(rawId, 10) : undefined;
+    console.log("Raw id from request:", rawId, "Parsed id:", id, "Is NaN:", isNaN(id));
 
     const {
       firstName,
@@ -127,8 +188,9 @@ router.put("/update-profile", (req, res) => {
     } = req.body;
 
     // Basic validations
-    if (!id || !Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ message: "Valid numeric user id is required" });
+    if (id !== undefined && (isNaN(id) || !Number.isInteger(id) || id < 0)) {
+      console.log("Invalid id:", id, "type:", typeof id);
+      return res.status(400).json({ message: "Valid numeric user id is required (must be >= 0)" });
     }
     if (!email || !emailIsValid(email)) {
       return res.status(400).json({ message: "Valid email is required" });
@@ -148,19 +210,36 @@ router.put("/update-profile", (req, res) => {
 
       // Helper to check if provided email belongs to another user
       const checkEmailConflict = (cb) => {
-        db.query(
-          "SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1",
-          [email, id],
-          (emailErr, emailRows) => {
-            if (emailErr) {
-              console.error("Email conflict check error:", emailErr);
-              return cb(emailErr);
+        if (id === undefined || id === 0) {
+          // If no id or id is 0, just check if email exists
+          db.query(
+            "SELECT id FROM users WHERE email = ? LIMIT 1",
+            [email],
+            (emailErr, emailRows) => {
+              if (emailErr) {
+                console.error("Email conflict check error:", emailErr);
+                return cb(emailErr);
+              }
+              // if any row, conflict exists
+              const conflict = emailRows && emailRows.length > 0;
+              cb(null, conflict);
             }
-            // if any row, conflict exists
-            const conflict = emailRows && emailRows.length > 0;
-            cb(null, conflict);
-          }
-        );
+          );
+        } else {
+          db.query(
+            "SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1",
+            [email, id],
+            (emailErr, emailRows) => {
+              if (emailErr) {
+                console.error("Email conflict check error:", emailErr);
+                return cb(emailErr);
+              }
+              // if any row, conflict exists
+              const conflict = emailRows && emailRows.length > 0;
+              cb(null, conflict);
+            }
+          );
+        }
       };
 
       // If user exists -> UPDATE
@@ -220,8 +299,8 @@ router.put("/update-profile", (req, res) => {
       const doInsert = (passwordToStore) => {
         const insertSql = `
           INSERT INTO users
-            (email, password, firstName, lastName, phone, address, department, role, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'Admin', NOW())
+  (email, password, firstName, lastName, phone, address, department, role, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'Admin', NOW())
         `;
         const insertParams = [email, passwordToStore, firstName, lastName, phone, address, department];
 

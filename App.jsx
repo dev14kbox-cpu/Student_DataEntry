@@ -128,54 +128,76 @@ const App = () => {
     [dbInitialized]
   );
 
-  const handleSignup = useCallback(
-    async (signupData) => {
-      if (!dbInitialized) {
-        Alert.alert('Error', 'Database not initialized. Please restart the app.');
-        return;
-      }
+ const handleSignup = useCallback(
+  async (signupData) => {
+    if (!dbInitialized) {
+      Alert.alert('Error', 'Database not initialized. Please restart the app.');
+      return;
+    }
 
-      // Basic validation
-      if (!signupData.email || !signupData.password || !signupData.firstName || !signupData.lastName) {
-        Alert.alert('Validation Error', 'Please fill in all required fields');
-        return;
-      }
+    // Basic validation
+    if (!signupData.email || !signupData.password || !signupData.firstName || !signupData.lastName) {
+      Alert.alert('Validation Error', 'Please fill in all required fields');
+      return;
+    }
 
-      if (signupData.password.length < 6) {
-        Alert.alert('Validation Error', 'Password must be at least 6 characters long');
-        return;
-      }
+    if (signupData.password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters long');
+      return;
+    }
 
+    try {
+      setIsLoading(true);
+      console.log('Attempting signup for:', signupData.email);
+
+      // 1. Create user in local SQLite DB
+      const newUser = await createUser(signupData);
+      console.log('Local signup successful for user:', newUser.id);
+
+      // 2. Sync user to server MySQL DB
       try {
-        setIsLoading(true);
-        console.log('Attempting signup for:', signupData.email);
+        const { syncUserToServerAPI } = await import('./src/API/serverAPI');
+        await syncUserToServerAPI({
+          firstName: signupData.firstName,
+          lastName: signupData.lastName,
+          email: signupData.email,
+          phone: '',
+          address: '',
+          department: 'Administration',
+        });
+        console.log('Server sync successful for user:', signupData.email);
+      } catch (syncError) {
+        console.error('Server sync failed, but local signup succeeded:', syncError);
+        // Don't fail the signup if server sync fails - user can sync later
+      }
 
-        const newUser = await createUser(signupData);
-        console.log('Signup successful for user:', newUser.id);
-
-        // Persist auth/session
-        await Promise.all([
-          AsyncStorage.setItem('userToken', `auth-token-${newUser.id}`),
-          AsyncStorage.setItem('userData', JSON.stringify(newUser)),
-        ]);
-
-        setUserData(newUser);
-        setIsAuthenticated(true);
-        setCurrentScreen('dashboard');
-
-        Alert.alert('Success', `Account created successfully! Welcome, ${newUser.firstName}!`);
-      } catch (error) {
-        console.error('Signup error:', error);
-        const errorMessage = error.message && error.message.includes('UNIQUE constraint')
+      Alert.alert(
+        'Success',
+        'Account created successfully! Please login now.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // 🔥 After sign up → go to login screen
+              setCurrentScreen('login');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Signup error:', error);
+      const errorMessage =
+        error.message && error.message.includes('UNIQUE constraint')
           ? 'Email already exists. Please use a different email.'
           : 'Signup failed. Please try again.';
-        Alert.alert('Signup Failed', errorMessage);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [dbInitialized]
-  );
+      Alert.alert('Signup Failed', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  },
+  [dbInitialized]
+);
+
 
   /************************************************************************
    * Logout flow
