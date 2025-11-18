@@ -55,15 +55,44 @@ router.post("/sync-students", (req, res) => {
   });
 });
 
-// GET SYNC STUDENTS - Return all students for sync
+// GET SYNC STUDENTS - Return paginated students for sync
 router.get("/sync-students", (req, res) => {
-  db.query("SELECT * FROM students", (err, results) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 100; // Default 100 for sync
+  const offset = (page - 1) * limit;
+
+  // First get total count
+  db.query("SELECT COUNT(*) as total FROM students", (err, countResult) => {
     if (err) {
-      console.log("Get sync students error:", err);
-      return res.status(500).json({ message: "Failed to fetch students" });
+      console.log("Get sync students count error:", err);
+      return res.status(500).json({ message: "Failed to fetch students count" });
     }
 
-    res.json({ students: results });
+    const totalRecords = countResult[0].total;
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    // Then get paginated data
+    db.query(
+      "SELECT * FROM students ORDER BY createdAt DESC LIMIT ? OFFSET ?",
+      [limit, offset],
+      (err, results) => {
+        if (err) {
+          console.log("Get sync students error:", err);
+          return res.status(500).json({ message: "Failed to fetch students" });
+        }
+
+        res.json({
+          students: results,
+          pagination: {
+            currentPage: page,
+            totalPages: totalPages,
+            totalRecords: totalRecords,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1
+          }
+        });
+      }
+    );
   });
 });
 

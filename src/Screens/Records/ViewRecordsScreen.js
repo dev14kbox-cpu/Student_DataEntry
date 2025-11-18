@@ -12,9 +12,9 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Search, Edit, ArrowLeft, RotateCw } from 'lucide-react-native';
+import { Search, Edit, ArrowLeft, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { getAllStudents } from '../../database/DatabaseService'; // DB call. :contentReference[oaicite:10]{index=10}
+import { getAllStudents, getStudentsCount } from '../../database/DatabaseService';
 
 const { width } = Dimensions.get('window');
 
@@ -23,12 +23,24 @@ const ViewRecordsScreen = ({ onSelectStudent, onBack }) => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
 
-  const fetchStudents = async () => {
+  const pageSize = 50; // Records per page
+
+  const fetchStudents = async (page = currentPage, search = searchTerm) => {
     setLoading(true);
     try {
-      const rows = await getAllStudents();
+      // Fetch paginated data and total count
+      const [rows, count] = await Promise.all([
+        getAllStudents(page, pageSize, search),
+        getStudentsCount(search)
+      ]);
+
       setStudents(rows || []);
+      setTotalRecords(count);
+      setTotalPages(Math.ceil(count / pageSize));
     } catch (err) {
       console.error('Fetch students error:', err);
       Alert.alert('Error', 'Failed to load students from database.');
@@ -42,16 +54,27 @@ const ViewRecordsScreen = ({ onSelectStudent, onBack }) => {
     fetchStudents();
   }, []);
 
+  // Handle search with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setCurrentPage(1); // Reset to first page on search
+      fetchStudents(1, searchTerm);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
   const onRefresh = () => {
     setRefreshing(true);
-    fetchStudents();
+    fetchStudents(currentPage, searchTerm);
   };
 
-  const filteredStudents = students.filter((s) =>
-    (s.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.mobile || '').includes(searchTerm) ||
-    (s.fullName || s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      fetchStudents(newPage, searchTerm);
+    }
+  };
 
   const renderStudentItem = ({ item, index }) => {
     return (
@@ -138,15 +161,47 @@ const ViewRecordsScreen = ({ onSelectStudent, onBack }) => {
           </View>
         ) : (
           <>
-            {filteredStudents.length > 0 ? (
-              <FlatList
-                data={filteredStudents}
-                renderItem={renderStudentItem}
-                keyExtractor={(item) => String(item.id)}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-              />
+            {students.length > 0 ? (
+              <>
+                <FlatList
+                  data={students}
+                  renderItem={renderStudentItem}
+                  keyExtractor={(item) => String(item.id)}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.listContent}
+                  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                />
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <View style={styles.paginationContainer}>
+                    <TouchableOpacity
+                      style={[styles.pageButton, currentPage === 1 && styles.pageButtonDisabled]}
+                      onPress={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft size={16} color={currentPage === 1 ? "#64748b" : "#2563eb"} />
+                    </TouchableOpacity>
+
+                    <View style={styles.pageInfo}>
+                      <Text style={styles.pageText}>
+                        Page {currentPage} of {totalPages}
+                      </Text>
+                      <Text style={styles.recordsText}>
+                        {totalRecords} total records
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.pageButton, currentPage === totalPages && styles.pageButtonDisabled]}
+                      onPress={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight size={16} color={currentPage === totalPages ? "#64748b" : "#2563eb"} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>No students found.</Text>
@@ -191,6 +246,38 @@ const styles = StyleSheet.create({
   editButton: { padding: 8, borderRadius: 8, backgroundColor: 'rgba(37,99,235,0.06)' },
   emptyState: { padding: 24, alignItems: 'center' },
   emptyStateText: { color: '#94a3b8' },
+  paginationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  pageButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(37,99,235,0.1)',
+  },
+  pageButtonDisabled: {
+    backgroundColor: 'rgba(100,116,139,0.1)',
+  },
+  pageInfo: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  pageText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  recordsText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
 });
 
 export default ViewRecordsScreen;

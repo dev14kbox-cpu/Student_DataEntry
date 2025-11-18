@@ -151,6 +151,48 @@ Edit Profile → Local SQLite Update → AsyncStorage Update → Server Sync →
 - **POST /api/sync-students**: Receives and stores student data
 - **GET /api/sync-students**: Returns all students (for sync verification)
 
+
+## Pagination Feature
+
+### Overview
+The Student Data Entry app now includes pagination functionality to improve performance when handling large datasets. This prevents memory issues and provides a better user experience by loading data in manageable chunks.
+
+### Implementation Details
+
+#### Frontend (React Native)
+- **Page Size**: 50 records per page
+- **Debounced Search**: 500ms delay to prevent excessive API calls during typing
+- **Pagination Controls**: Previous/Next buttons with page information display
+- **State Management**: Tracks current page, total pages, and total records
+
+#### Backend (Node.js)
+- **Database Queries**: Uses `LIMIT` and `OFFSET` for efficient pagination
+- **API Endpoints**: Support pagination parameters (`page`, `limit`)
+- **Response Format**: Includes pagination metadata (current page, total pages, total records)
+
+#### Database Layer
+- **Modified Functions**:
+  - `getAllStudents(page, limit, searchTerm)`: Fetches paginated student records
+  - `getStudentsCount(searchTerm)`: Returns total record count for pagination calculations
+
+#### Sync Operations
+- **Chunk Size**: 50 records per batch during server synchronization
+- **Purpose**: Prevents timeouts when syncing large datasets
+- **Progress Logging**: Shows sync progress for each chunk
+
+### Files Modified
+- `src/Screens/Records/ViewRecordsScreen.js`: Added pagination UI and logic
+- `src/database/DatabaseService.js`: Updated database functions for pagination
+- `Backend/routes/sync.js`: Modified sync endpoint to support pagination
+- `src/API/serverAPI.js`: Enhanced sync function with chunking
+
+### Benefits
+- **Performance**: Faster loading times with smaller data chunks
+- **Scalability**: Handles large datasets efficiently
+- **User Experience**: Responsive search and clear navigation
+- **Reliability**: Prevents sync timeouts for large operations
+
+
 ## Database Schema
 
 ### SQLite (Mobile)
@@ -284,3 +326,28 @@ CREATE TABLE students (
 3. App automatically creates SQLite tables on first run
 
 This documentation provides a comprehensive overview of the Student Data Entry application's architecture, functionality, and data flow. The app demonstrates modern mobile development practices with offline-first design and robust synchronization capabilities.
+
+
+
+
+
+
+
+# How Sync Works When Server is Down
+## Offline-First Architecture: The app stores all data locally in SQLite first, then attempts to sync to the server when online. This ensures the app continues to function normally even when the server is unavailable.
+
+# Key Points:
+
+Local Storage: Data is saved to local SQLite immediately with isSynced = 0
+Graceful Failures: Sync attempts fail silently without affecting app functionality
+Automatic Retry: Every 30 seconds, the app checks connection and retries failed syncs
+Manual Sync: Users can manually trigger sync attempts from the Sync screen
+Status Tracking: Each record has an isSynced flag to track sync status
+Process Flow:
+
+User creates/edits data → Saved to local SQLite with isSynced = 0
+App checks network every 30 seconds
+If online, attempts to sync unsynced records
+If server down, sync fails but local data remains intact
+Next interval repeats the process
+This architecture ensures the app works reliably regardless of server status, with data safely stored locally until the server becomes available again.

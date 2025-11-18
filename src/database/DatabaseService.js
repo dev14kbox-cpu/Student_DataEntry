@@ -209,14 +209,29 @@ export const updateUser = (id, data) => {
 };
 
 /* -----------------------------------------------------
-   STUDENT METHODS (Unchanged)
+   STUDENT METHODS
 ----------------------------------------------------- */
-export const getAllStudents = () => {
+export const getAllStudents = (page = 1, limit = 50, searchTerm = '') => {
   return new Promise((resolve, reject) => {
+    const offset = (page - 1) * limit;
+
+    let query = "SELECT * FROM students";
+    let params = [];
+
+    // Add search filter if provided
+    if (searchTerm && searchTerm.trim()) {
+      query += " WHERE (fullName LIKE ? OR email LIKE ? OR mobile LIKE ?)";
+      const searchPattern = `%${searchTerm.trim()}%`;
+      params = [searchPattern, searchPattern, searchPattern];
+    }
+
+    query += " ORDER BY createdAt DESC LIMIT ? OFFSET ?";
+    params.push(limit, offset);
+
     db.transaction((tx) => {
       tx.executeSql(
-        "SELECT * FROM students ORDER BY createdAt DESC",
-        [],
+        query,
+        params,
         (_, results) => {
           let students = [];
           for (let i = 0; i < results.rows.length; i++) {
@@ -224,6 +239,29 @@ export const getAllStudents = () => {
           }
           resolve(students);
         },
+        (_, error) => reject(error)
+      );
+    });
+  });
+};
+
+// Get total count for pagination
+export const getStudentsCount = (searchTerm = '') => {
+  return new Promise((resolve, reject) => {
+    let query = "SELECT COUNT(*) as total FROM students";
+    let params = [];
+
+    if (searchTerm && searchTerm.trim()) {
+      query += " WHERE (fullName LIKE ? OR email LIKE ? OR mobile LIKE ?)";
+      const searchPattern = `%${searchTerm.trim()}%`;
+      params = [searchPattern, searchPattern, searchPattern];
+    }
+
+    db.transaction((tx) => {
+      tx.executeSql(
+        query,
+        params,
+        (_, results) => resolve(results.rows.item(0).total),
         (_, error) => reject(error)
       );
     });

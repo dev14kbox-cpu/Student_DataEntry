@@ -5,13 +5,33 @@ import axios from "axios";
 // YOUR SERVER
 const BASE_URL = "http://192.168.1.5:5000"; // Node.js backend
 
-export const syncStudentsToServerAPI = async (students) => {
+// SYNC STUDENTS TO SERVER (with chunking for large datasets)
+export const syncStudentsToServerAPI = async (students, chunkSize = 50) => {
   try {
-    const response = await axios.post(`${BASE_URL}/api/sync-students`, {
-      students: students,
-    });
+    console.log('🔄 Syncing', students.length, 'students to server in chunks of', chunkSize);
 
-    return response.data.message === "Sync completed";
+    const chunks = [];
+    for (let i = 0; i < students.length; i += chunkSize) {
+      chunks.push(students.slice(i, i + chunkSize));
+    }
+
+    let totalSynced = 0;
+    let totalChunks = chunks.length;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`🔄 Syncing chunk ${i + 1}/${totalChunks} (${chunk.length} students)...`);
+
+      const response = await axios.post(`${BASE_URL}/api/sync-students`, {
+        students: chunk,
+      });
+
+      totalSynced += response.data.synced || 0;
+      console.log(`✅ Chunk ${i + 1} synced: ${response.data.synced}/${chunk.length}`);
+    }
+
+    console.log(`✅ Total sync completed: ${totalSynced}/${students.length} students`);
+    return true;
   } catch (err) {
     console.log("❌ Sync API Error:", err.message);
     return false;
