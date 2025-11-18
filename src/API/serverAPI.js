@@ -3,7 +3,7 @@
 import axios from "axios";
 
 // YOUR SERVER
-const BASE_URL = "http://localhost:5000"; // Node.js backend
+const BASE_URL = "http://192.168.1.5:5000"; // Node.js backend
 
 export const syncStudentsToServerAPI = async (students) => {
   try {
@@ -24,7 +24,10 @@ export const syncUserToServerAPI = async (userData) => {
 
     const response = await axios.put(
       `${BASE_URL}/api/update-profile`,
-      userData, // No id for new users
+      {
+        ...userData,
+        id: 0, // Explicitly set id to 0 for new users during signup
+      },
       { headers: { "Content-Type": "application/json" } }
     );
 
