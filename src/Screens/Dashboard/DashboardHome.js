@@ -36,10 +36,9 @@ const DashboardHome = ({ onNavigate }) => {
 
       const total = students.length;
 
-      const today = new Date().toISOString().split("T")[0];
-
+      // Count all synced students (isSynced = 1)
       const syncedToday = students.filter(
-        (s) => s.isSynced === 1 && s.admissionDate === today
+        (s) => s.isSynced === 1
       ).length;
 
       const pending = students.filter(
@@ -63,6 +62,10 @@ const DashboardHome = ({ onNavigate }) => {
     }).start();
 
     loadStats();
+
+    // Refresh stats every 10 seconds for real-time updates
+    const interval = setInterval(loadStats, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const navCards = [

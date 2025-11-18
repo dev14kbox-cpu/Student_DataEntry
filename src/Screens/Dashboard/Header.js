@@ -20,7 +20,9 @@ import {
 
 import LinearGradient from "react-native-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getAllStudents } from "../database/DatabaseService";
+import NetInfo from "@react-native-community/netinfo";
+import { getUnsyncedStudents } from "../../database/DatabaseService";
+import { BASE_URL } from "../../API/serverAPI";
 
 const Header = ({ onLogout, onNavigateToProfile }) => {
   const [adminName, setAdminName] = useState("Admin");
@@ -53,21 +55,26 @@ const Header = ({ onLogout, onNavigateToProfile }) => {
   ----------------------------------------------------- */
   const loadPendingSyncCount = async () => {
     try {
-      const students = await getAllStudents();
-      const pending = students.filter(s => s.status === "Pending").length;
-      setPendingSync(pending);
+      const students = await getUnsyncedStudents();
+      setPendingSync(students.length);
     } catch (error) {
       console.log("Error loading pending sync count:", error);
     }
   };
 
   /* -----------------------------------------------------
-     Simulated Online/Offline Status Toggle (Optional)
+     Check Online Status using NetInfo
   ----------------------------------------------------- */
+  const checkOnlineStatus = () => {
+    NetInfo.fetch().then(state => {
+      setIsOnline(state.isConnected && state.isInternetReachable);
+    });
+  };
+
   useEffect(() => {
     const ping = setInterval(() => {
-      setIsOnline(true); 
-      loadPendingSyncCount(); 
+      checkOnlineStatus();
+      loadPendingSyncCount();
     }, 6000);
     return () => clearInterval(ping);
   }, []);

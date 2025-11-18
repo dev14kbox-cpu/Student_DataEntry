@@ -19,6 +19,9 @@ import {
 } from './src/database/DatabaseService';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import { getUnsyncedStudents, markStudentsSynced } from './src/database/DatabaseService';
+import { syncStudentsToServerAPI } from './src/API/serverAPI';
 
 const App = () => {
   // Auth + navigation state
@@ -77,6 +80,40 @@ const App = () => {
       setIsLoading(false);
     }
   };
+
+  /************************************************************************
+   * Automatic Background Sync for Students
+   * Runs every 30 seconds when online and authenticated
+   ************************************************************************/
+  useEffect(() => {
+    if (!isAuthenticated || !dbInitialized) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const net = await NetInfo.fetch();
+        if (!net.isConnected) return;
+
+        const pending = await getUnsyncedStudents();
+        if (pending.length === 0) return;
+
+        console.log('🔄 Auto-syncing', pending.length, 'students...');
+
+        const success = await syncStudentsToServerAPI(pending);
+
+        if (success) {
+          const ids = pending.map((s) => s.id);
+          await markStudentsSynced(ids);
+          console.log('✅ Auto-sync success:', ids.length, 'students synced');
+        } else {
+          console.log('❌ Auto-sync failed: Server error');
+        }
+      } catch (err) {
+        console.log('❌ Auto-sync error:', err.message);
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, dbInitialized]);
 
   /************************************************************************
    * Authentication: Login, Signup
